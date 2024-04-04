@@ -99,16 +99,16 @@ func (e expHandle) FindById(c *fiber.Ctx) error {
 	objID, err := primitive.ObjectIDFromHex(experienceId)
 	if err != nil {
 		fmt.Println("0")
-		slog.Error("error log id", slog.String("id",experienceId), slog.Any("err", err))
+		slog.Error("error log id", slog.String("id", experienceId), slog.Any("err", err))
 		return c.Status(http.StatusBadRequest).JSON(responses.MessageResponse{
 			Status:  http.StatusBadRequest,
 			Message: "error",
 			Data:    &fiber.Map{"data": "Not found"},
 		})
 	}
-	
-	if objID.IsZero(){
-		slog.Error("error log id", slog.String("id",experienceId), slog.Any("err", err))
+
+	if objID.IsZero() {
+		slog.Error("error log id", slog.String("id", experienceId), slog.Any("err", err))
 		return c.Status(http.StatusBadRequest).JSON(responses.MessageResponse{
 			Status:  http.StatusBadRequest,
 			Message: "error",
@@ -121,7 +121,7 @@ func (e expHandle) FindById(c *fiber.Ctx) error {
 		fmt.Println("1")
 		if err == mongo.ErrNoDocuments {
 			return c.Status(fiber.StatusNotFound).JSON(responses.MessageResponse{
-				Status:  http.StatusInternalServerError,
+				Status:  http.StatusNotFound,
 				Message: "error",
 				Data:    &fiber.Map{"data": "Experience not found"},
 			})

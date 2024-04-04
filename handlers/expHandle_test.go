@@ -11,6 +11,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/integration/mtest"
 	"go.uber.org/mock/gomock"
 )
 
@@ -38,26 +40,59 @@ func TestCreate(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockStore := mock_services.NewMockExperienceService(ctrl)
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	NewExperienceHandle(f, mockStore)
+	mt.Run("Response-Success", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	mockStore.EXPECT().Create(gomock.Any(), gomock.Any()).Times(1).Return(nil)
+		mockStore.EXPECT().Create(gomock.Any(), gomock.Any()).Times(1).Return(nil)
 
-	payload := &models.ExperienceDto{
-		Experience: "Hello",
-	}
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
 
-	data, err := json.Marshal(payload)
-	require.NoError(t, err)
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
 
-	req := httptest.NewRequest(fiber.MethodPost, "/api/experiences", bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(fiber.MethodPost, "/api/experiences", bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := f.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+		require.Equal(t, fiber.StatusCreated, res.StatusCode)
+	})
 
-	response, err := f.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
+	mt.Run("Response-BadRequest", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	require.Equal(t, 201, response.StatusCode)
+		req := httptest.NewRequest(fiber.MethodPost, "/api/experiences", nil)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-internalserver-error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		mockStore.EXPECT().Create(gomock.Any(), gomock.Any()).Times(1).Return(mongo.ErrUnacknowledgedWrite)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(fiber.MethodPost, "/api/experiences", bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusInternalServerError, res.StatusCode)
+	})
+
 }
 
 func TestUpdate(t *testing.T) {
@@ -70,27 +105,79 @@ func TestUpdate(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockStore := mock_services.NewMockExperienceService(ctrl)
-	NewExperienceHandle(f, mockStore)
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	payload := &models.ExperienceDto{
-		Experience: "Helloooooo",
-	}
+	mt.Run("Response-Success", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	data, err := json.Marshal(payload)
-	require.NoError(t, err)
+		payload := &models.ExperienceDto{
+			Experience: "Helloooooo",
+		}
 
-	mockId := primitive.NewObjectID()
-	mockStore.EXPECT().Update(mockId, payload).Times(1).Return(nil)
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
 
-	url := "/api/" + mockId.Hex()
-	req := httptest.NewRequest(fiber.MethodPut, url, bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().Update(mockId, payload).Times(1).Return(nil)
 
-	response, err := f.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodPut, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
 
-	require.Equal(t, 200, response.StatusCode)
+		res, err := f.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+		require.Equal(t, fiber.StatusOK, res.StatusCode)
+
+	})
+
+	mt.Run("Response-NotFound-FormatID-Error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		req := httptest.NewRequest(fiber.MethodPut, "/api/yyyyyy", nil)
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-BadRequest-BodyParser", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		mockId := primitive.NewObjectID()
+		url := "/api/" + mockId.Hex()
+
+		req := httptest.NewRequest(fiber.MethodPut, url, nil)
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-internalserver-error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().Update(mockId, payload).Times(1).Return(mongo.ErrUnacknowledgedWrite)
+
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodPut, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusInternalServerError, res.StatusCode)
+	})
 
 }
 
@@ -104,27 +191,99 @@ func TestFindById(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockStore := mock_services.NewMockExperienceService(ctrl)
-	NewExperienceHandle(f, mockStore)
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	payload := &models.ExperienceDto{
-		Experience: "Hellooo",
-	}
+	mt.Run("Response-Success", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	data, err := json.Marshal(payload)
-	require.NoError(t, err)
+		payload := &models.ExperienceDto{
+			Experience: "Hellooo",
+		}
 
-	mockId := primitive.NewObjectID()
-	mockStore.EXPECT().FindById(mockId).Times(1).Return(payload, err)
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
 
-	url := "/api/" + mockId.Hex()
-	req := httptest.NewRequest(fiber.MethodGet, url, bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().FindById(mockId).Times(1).Return(payload, err)
 
-	response, err := f.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodGet, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
 
-	require.Equal(t, 200, response.StatusCode)
+		res, err := f.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+
+		require.Equal(t, fiber.StatusOK, res.StatusCode)
+	})
+
+	mt.Run("Response-NotFound-FormatID-Error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		req := httptest.NewRequest(fiber.MethodGet, "/api/yyyyyy", nil)
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-NotFound-FormatID-Error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		req := httptest.NewRequest(fiber.MethodGet, "/api/000000000000000000000000", nil)
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-Documents Not found", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().FindById(mockId).Times(1).Return(err, mongo.ErrNoDocuments)
+
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodGet, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusNotFound, res.StatusCode)
+
+	})
+
+	mt.Run("Response-internalserver-error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().FindById(mockId).Times(1).Return(err, mongo.ErrUnacknowledgedWrite)
+
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodGet, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusInternalServerError, res.StatusCode)
+	})
+
 }
 
 func TestFindAll(t *testing.T) {
@@ -137,25 +296,50 @@ func TestFindAll(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockStore := mock_services.NewMockExperienceService(ctrl)
-	NewExperienceHandle(f, mockStore)
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	payload := []*models.ExperienceDto{
-		{Experience: "Hello"},
-	}
+	mt.Run("Response-Success", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	data, err := json.Marshal(payload)
-	require.NoError(t, err)
+		payload := []*models.ExperienceDto{
+			{Experience: "Hello"},
+		}
 
-	mockStore.EXPECT().FindAll().Times(1).Return(payload, err)
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
 
-	req := httptest.NewRequest(fiber.MethodGet, "/api/", bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
+		mockStore.EXPECT().FindAll().Times(1).Return(payload, err)
 
-	response, err := f.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
+		req := httptest.NewRequest(fiber.MethodGet, "/api/", bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
 
-	require.Equal(t, 200, response.StatusCode)
+		res, err := f.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+
+		require.Equal(t, fiber.StatusOK, res.StatusCode)
+	})
+
+	mt.Run("Response-internalserver-error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		mockStore.EXPECT().FindAll().Times(1).Return(err, mongo.ErrUnacknowledgedWrite)
+
+		req := httptest.NewRequest(fiber.MethodGet, "/api/", bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusInternalServerError, res.StatusCode)
+	})
 
 }
 
@@ -169,25 +353,63 @@ func TestDelete(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockStore := mock_services.NewMockExperienceService(ctrl)
-	NewExperienceHandle(f, mockStore)
+	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
-	payload := &models.ExperienceDto{
-		Experience: "Hellooo",
-	}
+	mt.Run("Response-Success", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
 
-	data, err := json.Marshal(payload)
-	require.NoError(t, err)
+		payload := &models.ExperienceDto{
+			Experience: "Hellooo",
+		}
 
-	mockId := primitive.NewObjectID()
-	mockStore.EXPECT().Delete(mockId).Times(1).Return(err)
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
 
-	url := "/api/" + mockId.Hex()
-	req := httptest.NewRequest(fiber.MethodDelete, url, bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().Delete(mockId).Times(1).Return(err)
 
-	response, err := f.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodDelete, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
 
-	require.Equal(t, 200, response.StatusCode)
+		res, err := f.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+
+		require.Equal(t, fiber.StatusOK, res.StatusCode)
+	})
+
+	mt.Run("Response-NotFound-FormatID-Error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		req := httptest.NewRequest(fiber.MethodDelete, "/api/yyyyyy", nil)
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusBadRequest, res.StatusCode)
+	})
+
+	mt.Run("Response-internalserver-error", func(mt *mtest.T) {
+		NewExperienceHandle(f, mockStore)
+
+		payload := &models.ExperienceDto{
+			Experience: "Hello",
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		mockId := primitive.NewObjectID()
+		mockStore.EXPECT().Delete(mockId).Times(1).Return(mongo.ErrUnacknowledgedWrite)
+
+		url := "/api/" + mockId.Hex()
+		req := httptest.NewRequest(fiber.MethodDelete, url, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := f.Test(req)
+		defer func() { _ = res.Body.Close() }()
+		require.Nil(t, err)
+		require.Equal(t, fiber.StatusInternalServerError, res.StatusCode)
+	})
+
 }

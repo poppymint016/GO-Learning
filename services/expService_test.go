@@ -108,7 +108,7 @@ func TestUpdate(t *testing.T) {
 	})
 }
 
-func TestById(t *testing.T) {
+func TestFindById(t *testing.T) {
 	mt := mtest.New(t, mtest.NewOptions().ClientType(mtest.Mock))
 
 	mt.Run("Success", func(mt *mtest.T) {
@@ -130,8 +130,8 @@ func TestById(t *testing.T) {
 			}},
 		})
 
-		payload, nil := e.FindById(id)
-		require.Nil(t, nil, *payload)
+		payload, err := e.FindById(id)
+		require.NoError(t, err, *payload)
 
 	})
 
@@ -155,29 +155,29 @@ func TestFindAll(t *testing.T) {
 
 	mt.Run("Success: FindAll", func(mt *mtest.T) {
 		e := NewExperienceService(mt.Client)
-		id := primitive.NewObjectID()
-		payload := []*models.ExperienceDto{
+
+		expected := []*models.ExperienceDto{
 			{Experience: "Hello"},
+			{Experience: "Hello1"},
 		}
 
-		mt.AddMockResponses(
-			mtest.CreateCursorResponse(1, "services.mock", mtest.FirstBatch, bson.D{
-				{Key: "_id", Value: id},
-				{Key: "experience", Value: payload},
-			}))
-		mt.AddMockResponses(bson.D{
-			{Key: "ok", Value: 1},
-			{Key: "Value", Value: bson.D{
-				{Key: "experience", Value: payload},
-			}},
+		first := mtest.CreateCursorResponse(1, "services.mock", mtest.FirstBatch, bson.D{
+			{Key: "experience", Value: expected[0].Experience},
 		})
 
-		payload, err := e.FindAll()
-		require.Error(t, err, payload)
+		second := mtest.CreateCursorResponse(0, "services.mock", mtest.NextBatch, bson.D{
+			{Key: "experience", Value: expected[1].Experience},
+		})
 
+		killCursors := mtest.CreateCursorResponse(0, "services.mock", mtest.NextBatch)
+		mt.AddMockResponses(first, second, killCursors)
+
+		result, nil := e.FindAll()
+		require.NotNil(t, result, nil)
+		require.Equal(t, expected, result)
 	})
 
-	mt.Run("Failed, FindById not found", func(mt *mtest.T) {
+	mt.Run("Failed, FindAll Not found", func(mt *mtest.T) {
 		e := NewExperienceService(mt.Client)
 
 		testErr := mtest.CommandError{
@@ -189,6 +189,18 @@ func TestFindAll(t *testing.T) {
 		payload, err := e.FindAll()
 		require.Error(t, err, payload)
 	})
+
+	mt.Run("Find-Cursor-ALL Data Type Error", func(mt *mtest.T) {
+		e := NewExperienceService(mt.Client)
+
+		mt.AddMockResponses(mtest.CreateCursorResponse(1, "services.mock", mtest.FirstBatch, bson.D{
+			{Key: "experience", Value: "Hello"}},
+		))
+
+		_, err := e.FindAll()
+		require.Error(t, err)
+	})
+
 }
 
 func TestDelete(t *testing.T) {
