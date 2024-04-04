@@ -2,9 +2,9 @@
 โปรเจ็คนี้จัดทำเพื่อเป็นส่วนหนึ่งของการเรียนรู้ Golang Programing ซึ่งเป็นโปรเจคเกี่ยวกับการเพิ่มประสบการณ์การทำงาน ประกอบไปด้วย Method Post/Put/Get/Delete โปรเจคนี้เป็นเพียงพื้นฐานการเขียน Rest-Api เท่านั้น โดยที่โปรเจคจะเขียนในโครงสร้าง Architecture Business Logic Layer หรือ Clean Architecture พร้อมกับการเขียน Unit test 
 
 ### Golang 
-Framework --> fiber
-Test Package--> testify / Uber-Mock
-Database --> MongoDB
+- Framework --> fiber
+- Test Package--> testify / Uber-Mock
+- Database --> MongoDB
 
 ### API Structure
 1. Create Experience
